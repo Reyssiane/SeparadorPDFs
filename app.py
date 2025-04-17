@@ -1,61 +1,74 @@
-
 import streamlit as st
 import pandas as pd
-import tempfile
+import zipfile
 from pathlib import Path
-import shutil
+import tempfile
 
-st.set_page_config(page_title="Separador de PDFs", page_icon="📂")
-st.title("📂 Separador de PDFs por Lote")
-"""
-    <div style='background-color:#fff3cd; padding:10px; border-radius:5px; border:1px solid #ffeeba; margin-bottom:20px;'>
-        <strong>📌 Como usar:</strong><br>
-        1. Faça o upload da planilha (.xlsx) contendo os dados das NFS-e.<br>
-        2. Selecione os arquivos PDF correspondentes.<br>
-        3. O sistema criará pastas por Lote com os PDFs separados.<br>
-        4. NFS-e que estiverem na planilha mas não tiverem PDF serão listadas.<br>
-    </div>
-    """,
-excel_file = st.file_uploader("📄 Selecione a planilha Excel (.xlsx)", type=["xlsx"])
-pdf_files = st.file_uploader("📁 Selecione os arquivos PDF (segure Ctrl para múltiplos)", type=["pdf"], accept_multiple_files=True)
+st.set_page_config(page_title="Separador de PDFs", layout="centered")
 
-if excel_file and pdf_files:
-    df = pd.read_excel(excel_file, sheet_name=0)
-    missing_files = []
-    
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        temp_dir = Path(tmpdirname)
-        
-        for _, row in df.iterrows():
-            nome_pdf = str(row['NFSe']) + ".pdf"
-            lote_valor = str(row['Lote']).strip()
+# Mensagem informativa no topo
+with st.container():
+    st.markdown(
+        '''<div style='padding: 20px; background-color: #f0f2f6; border-left: 5px solid #2c7be5; border-radius: 5px; margin-bottom: 20px;'>
+            <h4 style='margin: 0;'>📄 Como usar:</h4>
+            <ul style='margin-top: 10px; padding-left: 20px;'>
+                <li>Escolha a planilha que possui as colunas <b>NFSe</b> e <b>Lote</b>.</li>
+                <li>Selecione a pasta onde estão os arquivos PDF.</li>
+                <li>Os PDFs serão separados automaticamente por pastas de acordo com o lote.</li>
+                <li>Se houver notas na planilha sem o PDF correspondente, elas serão exibidas no final.</li>
+            </ul>
+        </div>''',
+        unsafe_allow_html=True
+    )
 
-            if lote_valor.isdigit():
-                lote = f"Lote {int(lote_valor):02d}"
-            else:
-                lote = f"Lote {lote_valor}"
+# Upload da planilha
+planilha = st.file_uploader("📋 Envie a planilha (Excel):", type=["xlsx"])
 
-            lote_path = temp_dir / lote
-            lote_path.mkdir(exist_ok=True)
+# Upload da pasta zip com os PDFs
+pdf_zip = st.file_uploader("🗂 Envie um arquivo .zip com os PDFs:", type=["zip"])
 
-            matched = [f for f in pdf_files if f.name == nome_pdf]
+if planilha and pdf_zip:
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
 
-            if matched:
-                file_path = lote_path / nome_pdf
-                with open(file_path, "wb") as out_file:
-                    out_file.write(matched[0].getbuffer())
-            else:
-                missing_files.append(nome_pdf)
+        # Salvar planilha e ler
+        planilha_path = temp_dir / "planilha.xlsx"
+        with open(planilha_path, "wb") as f:
+            f.write(planilha.read())
 
-        # Criar ZIP com os arquivos separados
-        zip_path = temp_dir / "pdfs_separados.zip"
-        shutil.make_archive(str(zip_path).replace(".zip", ""), 'zip', temp_dir)
-        
-        st.success("✅ PDFs separados com sucesso!")
-        with open(zip_path, "rb") as f:
-            st.download_button("📦 Baixar arquivos organizados (.zip)", f, file_name="pdfs_separados.zip")
+        df = pd.read_excel(planilha_path)
 
-        if missing_files:
-            st.warning("⚠️ Os seguintes arquivos PDF não foram encontrados:")
-            for file in missing_files:
-                st.text(f"• {file}")
+        # Salvar e extrair os PDFs
+        zip_path = temp_dir / "pdfs.zip"
+        with open(zip_path, "wb") as f:
+            f.write(pdf_zip.read())
+
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir / "pdfs")
+
+        pdf_folder = temp_dir / "pdfs"
+        arquivos_pdf = {f.name for f in pdf_folder.glob("*.pdf")}
+
+        # Cria subpastas por lote e move arquivos
+        output_zip_path = temp_dir / "pdfs_separados.zip"
+        faltando = []
+        with zipfile.ZipFile(output_zip_path, "w") as saida_zip:
+            for _, row in df.iterrows():
+                nome_pdf = str(row["NFSe"]) + ".pdf"
+                lote = str(row["Lote"]).strip()
+                lote_path = Path(f"Lote {lote}")
+
+                pdf_path = pdf_folder / nome_pdf
+                if pdf_path.exists():
+                    saida_zip.write(pdf_path, arcname=lote_path / nome_pdf)
+                else:
+                    faltando.append(nome_pdf)
+
+        st.success("✅ PDFs separados por lote!")
+        st.download_button("📦 Baixar arquivos separados", data=open(output_zip_path, "rb"), file_name="pdfs_separados.zip")
+
+        # Mostrar arquivos ausentes
+        if faltando:
+            st.warning("⚠️ Alguns arquivos da planilha não foram encontrados na pasta de PDFs:")
+            for nome in faltando:
+                st.text(f"• {nome}")
