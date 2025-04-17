@@ -1,32 +1,28 @@
 
 import streamlit as st
 import pandas as pd
-import shutil
-from pathlib import Path
 import tempfile
+from pathlib import Path
+import shutil
 
-st.set_page_config(page_title="Separador de PDFs", layout="centered")
-st.title("📁 Separador de PDFs por Lote")
-st.write("Selecione a planilha, a pasta com os PDFs e a pasta onde deseja salvar os arquivos separados.")
+st.set_page_config(page_title="Separador de PDFs", page_icon="📂")
+st.title("📂 Separador de PDFs por Lote")
 
-xlsx_file = st.file_uploader("📄 Envie a planilha Excel", type=["xlsx"])
-pdf_folder = st.directory_picker("📁 Selecione a pasta com os PDFs")
-output_folder = st.directory_picker("📁 Selecione a pasta de destino")
+excel_file = st.file_uploader("📄 Selecione a planilha Excel (.xlsx)", type=["xlsx"])
+pdf_files = st.file_uploader("📁 Selecione os arquivos PDF (segure Ctrl para múltiplos)", type=["pdf"], accept_multiple_files=True)
 
-if xlsx_file and pdf_folder and output_folder:
-    df = pd.read_excel(xlsx_file, sheet_name=0)
-    missing_pdfs = []
-
+if excel_file and pdf_files:
+    df = pd.read_excel(excel_file, sheet_name=0)
+    missing_files = []
+    
     with tempfile.TemporaryDirectory() as tmpdirname:
         temp_dir = Path(tmpdirname)
-
+        
         for _, row in df.iterrows():
             nome_pdf = str(row['NFSe']) + ".pdf"
             lote_valor = str(row['Lote']).strip()
 
-            if lote_valor.replace(" ", "").upper().startswith("LOTE"):
-                lote = lote_valor
-            elif lote_valor.isdigit():
+            if lote_valor.isdigit():
                 lote = f"Lote {int(lote_valor):02d}"
             else:
                 lote = f"Lote {lote_valor}"
@@ -34,22 +30,24 @@ if xlsx_file and pdf_folder and output_folder:
             lote_path = temp_dir / lote
             lote_path.mkdir(exist_ok=True)
 
-            origem = Path(pdf_folder) / nome_pdf
-            destino = lote_path / nome_pdf
+            matched = [f for f in pdf_files if f.name == nome_pdf]
 
-            if origem.exists():
-                shutil.copy2(origem, destino)
+            if matched:
+                file_path = lote_path / nome_pdf
+                with open(file_path, "wb") as out_file:
+                    out_file.write(matched[0].getbuffer())
             else:
-                missing_pdfs.append(nome_pdf)
+                missing_files.append(nome_pdf)
 
-        for pasta in temp_dir.iterdir():
-            destino_final = Path(output_folder) / pasta.name
-            destino_final.mkdir(exist_ok=True)
-            for arquivo in pasta.iterdir():
-                shutil.copy2(arquivo, destino_final / arquivo.name)
+        # Criar ZIP com os arquivos separados
+        zip_path = temp_dir / "pdfs_separados.zip"
+        shutil.make_archive(str(zip_path).replace(".zip", ""), 'zip', temp_dir)
+        
+        st.success("✅ PDFs separados com sucesso!")
+        with open(zip_path, "rb") as f:
+            st.download_button("📦 Baixar arquivos organizados (.zip)", f, file_name="pdfs_separados.zip")
 
-    st.success("✅ PDFs separados com sucesso!")
-    if missing_pdfs:
-        st.error("❌ NFS-e não encontradas na pasta:")
-        for nf in missing_pdfs:
-            st.write(f"- {nf}")
+        if missing_files:
+            st.warning("⚠️ Os seguintes arquivos PDF não foram encontrados:")
+            for file in missing_files:
+                st.text(f"• {file}")
