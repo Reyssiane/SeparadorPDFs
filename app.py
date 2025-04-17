@@ -7,7 +7,15 @@ import shutil
 
 st.set_page_config(page_title="Separador de PDFs", page_icon="📂")
 st.title("📂 Separador de PDFs por Lote")
-
+"""
+    <div style='background-color:#fff3cd; padding:10px; border-radius:5px; border:1px solid #ffeeba; margin-bottom:20px;'>
+        <strong>📌 Como usar:</strong><br>
+        1. Faça o upload da planilha (.xlsx) contendo os dados das NFS-e.<br>
+        2. Selecione os arquivos PDF correspondentes.<br>
+        3. O sistema criará pastas por Lote com os PDFs separados.<br>
+        4. NFS-e que estiverem na planilha mas não tiverem PDF serão listadas.<br>
+    </div>
+    """,
 excel_file = st.file_uploader("📄 Selecione a planilha Excel (.xlsx)", type=["xlsx"])
 pdf_files = st.file_uploader("📁 Selecione os arquivos PDF (segure Ctrl para múltiplos)", type=["pdf"], accept_multiple_files=True)
 
