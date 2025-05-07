@@ -7,6 +7,15 @@ import zipfile
 import io
 
 st.set_page_config(page_title="Separador de PDFs por Lote", layout="centered")
+
+st.markdown("""
+<style>
+.stDeployButton {display: none !important;}
+footer {visibility: hidden;}
+#MainMenu {visibility: hidden;}
+</style>
+""", unsafe_allow_html=True)
+
 st.title("📂 Separador de PDFs por Lote")
 
 st.markdown("""
